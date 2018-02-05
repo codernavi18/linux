@@ -138,7 +138,7 @@ Source: $sourcename
 Section: kernel
 Priority: optional
 Maintainer: $maintainer
-Build-Depends: bc, kmod, cpio
+Build-Depends: bc, kmod, cpio, libssl-dev
 Homepage: http://www.kernel.org/
 
 Package: $packagename
