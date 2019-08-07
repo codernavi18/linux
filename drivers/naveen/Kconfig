@@ -1,0 +1,17 @@
+#menu "All modules made by Naveen"
+
+menuconfig NAVEEN_MODULES
+    bool "Enable NAVEEN's modules"
+    help
+        This helps to enable modules made by Naveen.
+
+if NAVEEN_MODULES
+
+config NAVEEN_CUSTOM_MODULE
+	tristate "Hello World support"
+	default m
+	---help---
+	  This option enables building all the modules by naveen
+
+endif #NAVEEN_MODULES
+#endmenu
