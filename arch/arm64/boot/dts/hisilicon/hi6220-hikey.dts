@@ -131,7 +131,15 @@
 		};
 
 		i2c1: i2c@f7101000 {
+			#address-cells = <0x1>;
+			#size-cells = <0x0>;
 			status = "ok";
+
+			magn@13 {
+				compatible = "bosch,bmc150_magn";
+				reg = <0x13>;
+				status = "ok";
+			};
 		};
 
 		uart1: uart@f7111000 {

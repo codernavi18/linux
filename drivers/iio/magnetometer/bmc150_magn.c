@@ -17,6 +17,10 @@
  * more details.
  */
 
+
+//Alternative driver source code :
+//https://android.googlesource.com/kernel/mediatek/+/
+//android-mediatek-sprout-3.10-marshmallow-mr1/drivers/misc/mediatek/magnetometer/bmm150/bmm150.c
 #include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -39,41 +43,41 @@
 #define BMC150_MAGN_DRV_NAME			"bmc150_magn"
 #define BMC150_MAGN_IRQ_NAME			"bmc150_magn_event"
 
-#define BMC150_MAGN_REG_CHIP_ID			0x40
+#define BMC150_MAGN_REG_CHIP_ID			0x40  //this register holds the chip ID 0x32
 #define BMC150_MAGN_CHIP_ID_VAL			0x32
 
 #define BMC150_MAGN_REG_X_L			0x42
 #define BMC150_MAGN_REG_X_M			0x43
 #define BMC150_MAGN_REG_Y_L			0x44
 #define BMC150_MAGN_REG_Y_M			0x45
-#define BMC150_MAGN_SHIFT_XY_L			3
+#define BMC150_MAGN_SHIFT_XY_L			3 //we need to skip lowest 3 bits for X and Y
 #define BMC150_MAGN_REG_Z_L			0x46
 #define BMC150_MAGN_REG_Z_M			0x47
-#define BMC150_MAGN_SHIFT_Z_L			1
+#define BMC150_MAGN_SHIFT_Z_L			1 //we need to skip lowest 1 bit for Z
 #define BMC150_MAGN_REG_RHALL_L			0x48
 #define BMC150_MAGN_REG_RHALL_M			0x49
-#define BMC150_MAGN_SHIFT_RHALL_L		2
+#define BMC150_MAGN_SHIFT_RHALL_L		2 //we need to skip lowest 2 bits for RHALL
 
 #define BMC150_MAGN_REG_INT_STATUS		0x4A
 
 #define BMC150_MAGN_REG_POWER			0x4B
-#define BMC150_MAGN_MASK_POWER_CTL		BIT(0)
+#define BMC150_MAGN_MASK_POWER_CTL		BIT(0) //this means lowest 1 bit 0x00000001
 
 #define BMC150_MAGN_REG_OPMODE_ODR		0x4C
-#define BMC150_MAGN_MASK_OPMODE			GENMASK(2, 1)
-#define BMC150_MAGN_SHIFT_OPMODE		1
+#define BMC150_MAGN_MASK_OPMODE			GENMASK(2, 1) //this means bit 1 and bit 2 0x00000110 - register 0x4C
+#define BMC150_MAGN_SHIFT_OPMODE		1 //since the 2 opmode bits are bit 1 and bit 2. Bit 0 has to be left out
 #define BMC150_MAGN_MODE_NORMAL			0x00
 #define BMC150_MAGN_MODE_FORCED			0x01
 #define BMC150_MAGN_MODE_SLEEP			0x03
-#define BMC150_MAGN_MASK_ODR			GENMASK(5, 3)
-#define BMC150_MAGN_SHIFT_ODR			3
+#define BMC150_MAGN_MASK_ODR			GENMASK(5, 3) //Output Data Rate - register 0x4C
+#define BMC150_MAGN_SHIFT_ODR			3 //since we need to skip lowest 3 bits (2 opmode and 1 self test) - register 0x4C
 
 #define BMC150_MAGN_REG_INT			0x4D
 
 #define BMC150_MAGN_REG_INT_DRDY		0x4E
-#define BMC150_MAGN_MASK_DRDY_EN		BIT(7)
+#define BMC150_MAGN_MASK_DRDY_EN		BIT(7) //MSB is Data Ready Pin Enable
 #define BMC150_MAGN_SHIFT_DRDY_EN		7
-#define BMC150_MAGN_MASK_DRDY_INT3		BIT(6)
+#define BMC150_MAGN_MASK_DRDY_INT3		BIT(6) //Interrupt Pin
 #define BMC150_MAGN_MASK_DRDY_Z_EN		BIT(5)
 #define BMC150_MAGN_MASK_DRDY_Y_EN		BIT(4)
 #define BMC150_MAGN_MASK_DRDY_X_EN		BIT(3)
@@ -87,11 +91,12 @@
 #define BMC150_MAGN_REG_REP_Z			0x52
 #define BMC150_MAGN_REG_REP_DATAMASK		GENMASK(7, 0)
 
-#define BMC150_MAGN_REG_TRIM_START		0x5D
-#define BMC150_MAGN_REG_TRIM_END		0x71
+#define BMC150_MAGN_REG_TRIM_START		0x5D //should be 0x53 !!! - first invalid register - reserved
+#define BMC150_MAGN_REG_TRIM_END		0x71 //last register
 
-#define BMC150_MAGN_XY_OVERFLOW_VAL		-4096
-#define BMC150_MAGN_Z_OVERFLOW_VAL		-16384
+//read 4.6.6-Overflow
+#define BMC150_MAGN_XY_OVERFLOW_VAL		-4096 //since 13 bits available for storage of X and Y which is signed
+#define BMC150_MAGN_Z_OVERFLOW_VAL		-16384 //since 15 bits available for storage of Z which is signed
 
 /* Time from SUSPEND to SLEEP */
 #define BMC150_MAGN_START_UP_TIME_MS		3
@@ -108,8 +113,8 @@ enum bmc150_magn_axis {
 	AXIS_Y,
 	AXIS_Z,
 	RHALL,
-	AXIS_XYZ_MAX = RHALL,
-	AXIS_XYZR_MAX,
+	AXIS_XYZ_MAX = RHALL,  //<--- 3
+	AXIS_XYZR_MAX, // <--- 4
 };
 
 enum bmc150_magn_power_modes {
@@ -151,18 +156,20 @@ struct bmc150_magn_data {
 	int irq;
 };
 
+//this is the ODR - Output Data Rate - defined in register 0x4C
 static const struct {
 	int freq;
 	u8 reg_val;
 } bmc150_magn_samp_freq_table[] = { {2, 0x01},
 				    {6, 0x02},
 				    {8, 0x03},
-				    {10, 0x00},
+				    {10, 0x00}, //default value
 				    {15, 0x04},
 				    {20, 0x05},
 				    {25, 0x06},
 				    {30, 0x07} };
 
+//these are like recommended settings for data rates - refer Page 13 - BMM150
 enum bmc150_magn_presets {
 	LOW_POWER_PRESET,
 	REGULAR_PRESET,
@@ -170,6 +177,7 @@ enum bmc150_magn_presets {
 	HIGH_ACCURACY_PRESET
 };
 
+//settings corresponding to the above preset
 static const struct bmc150_magn_preset {
 	u8 rep_xy;
 	u8 rep_z;
@@ -219,8 +227,8 @@ static bool bmc150_magn_is_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 const struct regmap_config bmc150_magn_regmap_config = {
-	.reg_bits = 8,
-	.val_bits = 8,
+	.reg_bits = 8, //all register are 8 bit registers
+	.val_bits = 8, //all register are 8 bit registers
 
 	.max_register = BMC150_MAGN_REG_TRIM_END,
 	.cache_type = REGCACHE_RBTREE,
@@ -237,20 +245,25 @@ static int bmc150_magn_set_power_mode(struct bmc150_magn_data *data,
 	int ret;
 
 	switch (mode) {
+	//this can put the device in both suspend and sleep mode by writing 0 or 1 to power bit in 0x4B
 	case BMC150_MAGN_POWER_MODE_SUSPEND:
+		//set 0 for bit 0 for regsiter 0x4B
 		ret = regmap_update_bits(data->regmap, BMC150_MAGN_REG_POWER,
 					 BMC150_MAGN_MASK_POWER_CTL, !state);
 		if (ret < 0)
 			return ret;
+		//sleep for an approximate time (non-atomic) - min,max
 		usleep_range(BMC150_MAGN_START_UP_TIME_MS * 1000, 20000);
 		return 0;
 	case BMC150_MAGN_POWER_MODE_SLEEP:
+		//sets 0x11 for bit 1 and bit 2 for register 0x4C
 		return regmap_update_bits(data->regmap,
 					  BMC150_MAGN_REG_OPMODE_ODR,
 					  BMC150_MAGN_MASK_OPMODE,
 					  BMC150_MAGN_MODE_SLEEP <<
 					  BMC150_MAGN_SHIFT_OPMODE);
 	case BMC150_MAGN_POWER_MODE_NORMAL:
+		//sets 0x00 for bit 1 and bit 2 for register 0x4C
 		return regmap_update_bits(data->regmap,
 					  BMC150_MAGN_REG_OPMODE_ODR,
 					  BMC150_MAGN_MASK_OPMODE,
@@ -286,15 +299,18 @@ static int bmc150_magn_set_power_state(struct bmc150_magn_data *data, bool on)
 	return 0;
 }
 
+//returns the frequency
 static int bmc150_magn_get_odr(struct bmc150_magn_data *data, int *val)
 {
 	int ret, reg_val;
 	u8 i, odr_val;
 
+	//read 0x4C register
 	ret = regmap_read(data->regmap, BMC150_MAGN_REG_OPMODE_ODR, &reg_val);
 	if (ret < 0)
 		return ret;
-	odr_val = (reg_val & BMC150_MAGN_MASK_ODR) >> BMC150_MAGN_SHIFT_ODR;
+	//we want to read bit 3,4,5 of 0x4C register
+	odr_val = (reg_val & BMC150_MAGN_MASK_ODR) >> BMC150_MAGN_SHIFT_ODR; //right shift 3 bits
 
 	for (i = 0; i < ARRAY_SIZE(bmc150_magn_samp_freq_table); i++)
 		if (bmc150_magn_samp_freq_table[i].reg_val == odr_val) {
@@ -327,6 +343,8 @@ static int bmc150_magn_set_odr(struct bmc150_magn_data *data, int val)
 	return -EINVAL;
 }
 
+//this does not set the value into the sensor register, but just stores the max odr
+//into the private data structures
 static int bmc150_magn_set_max_odr(struct bmc150_magn_data *data, int rep_xy,
 				   int rep_z, int odr)
 {
@@ -351,6 +369,7 @@ static int bmc150_magn_set_max_odr(struct bmc150_magn_data *data, int rep_xy,
 		if (ret < 0)
 			return ret;
 	}
+	//formula on page 23 of BMM150 datasheet
 	/* the maximum selectable read-out frequency from datasheet */
 	max_odr = 1000000 / (145 * rep_xy + 500 * rep_z + 980);
 	if (odr > max_odr) {
@@ -431,16 +450,23 @@ static s32 bmc150_magn_compensate_z(struct bmc150_magn_trim_regs *tregs, s16 z,
 static int bmc150_magn_read_xyz(struct bmc150_magn_data *data, s32 *buffer)
 {
 	int ret;
-	__le16 values[AXIS_XYZR_MAX];
+	__le16 values[AXIS_XYZR_MAX]; //16 bits x 4 = 64bits = 8 bytes
 	s16 raw_x, raw_y, raw_z;
 	u16 rhall;
 	struct bmc150_magn_trim_regs tregs;
 
+	//sizeof(values) -> 8 which means 64 bytes
+	//
+	//we are telling to read 8 registers, no matter their individual size
+	//and that gets stored at values.
+	//Here we read from 0x42 to 0x49 i.e. read X,Y,Z and RHALL
 	ret = regmap_bulk_read(data->regmap, BMC150_MAGN_REG_X_L,
 			       values, sizeof(values));
 	if (ret < 0)
 		return ret;
 
+	//Note that each entry of the array is 16 bits each, hence there
+	//are 4 items in the array representing X,Y,Z and RHALL.
 	raw_x = (s16)le16_to_cpu(values[AXIS_X]) >> BMC150_MAGN_SHIFT_XY_L;
 	raw_y = (s16)le16_to_cpu(values[AXIS_Y]) >> BMC150_MAGN_SHIFT_XY_L;
 	raw_z = (s16)le16_to_cpu(values[AXIS_Z]) >> BMC150_MAGN_SHIFT_Z_L;
@@ -451,6 +477,12 @@ static int bmc150_magn_read_xyz(struct bmc150_magn_data *data, s32 *buffer)
 	if (ret < 0)
 		return ret;
 
+	//we need to write temperature adjusted values to the buffer, hence
+	//the below calls. The details are not public in the available datasheet.
+	//Hence, how compensate_* works and how tregs is valid is not clear.
+	//
+	//https://stackoverflow.com/questions/57471353/how-the-packed-style-structure-map-to-sensor-registers-in-driver-code
+	//https://github.com/BoschSensortec/BMM150-Sensor-API
 	buffer[AXIS_X] = bmc150_magn_compensate_x(&tregs, raw_x, rhall);
 	buffer[AXIS_Y] = bmc150_magn_compensate_y(&tregs, raw_y, rhall);
 	buffer[AXIS_Z] = bmc150_magn_compensate_z(&tregs, raw_z, rhall);
@@ -458,6 +490,10 @@ static int bmc150_magn_read_xyz(struct bmc150_magn_data *data, s32 *buffer)
 	return 0;
 }
 
+/*
+ * This is called per channel. Hence, the details about the channel being read will be
+ * filled in iio_chan_spec.
+ */
 static int bmc150_magn_read_raw(struct iio_dev *indio_dev,
 				struct iio_chan_spec const *chan,
 				int *val, int *val2, long mask)
@@ -468,6 +504,10 @@ static int bmc150_magn_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
+		/*
+		 * We should not attempt read_raw when triggered buffer support is enabled,
+		 * as simultaneous access of registers can cause issues.
+		 */
 		if (iio_buffer_enabled(indio_dev))
 			return -EBUSY;
 		mutex_lock(&data->mutex);
@@ -591,11 +631,12 @@ static int bmc150_magn_write_raw(struct iio_dev *indio_dev,
 	}
 }
 
+//prepares a string of all possible available frequencies
 static ssize_t bmc150_magn_show_samp_freq_avail(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev); //makes use of container_of
 	struct bmc150_magn_data *data = iio_priv(indio_dev);
 	size_t len = 0;
 	u8 i;
@@ -612,8 +653,23 @@ static ssize_t bmc150_magn_show_samp_freq_avail(struct device *dev,
 	return len;
 }
 
+/*
+ * The following line is a macro and it expands to :
+ * static struct iio_dev_atr iio_dev_attr_sampling_frequency_available = {
+ * 		.dev_attr = {
+ *			.attr = {
+ *				.name = sampling_frequency_available,
+ *				.mode = 777,
+ *			}
+ *			.show = bmc150_magn_show_samp_freq_avail,
+ *			.store = null
+ *		}
+ *		.address = 0
+ * };
+ */
 static IIO_DEV_ATTR_SAMP_FREQ_AVAIL(bmc150_magn_show_samp_freq_avail);
 
+//this will create an entry in sysfs called - "sampling_frequency_available"
 static struct attribute *bmc150_magn_attributes[] = {
 	&iio_dev_attr_sampling_frequency_available.dev_attr.attr,
 	NULL,
@@ -644,7 +700,7 @@ static const struct iio_chan_spec bmc150_magn_channels[] = {
 	BMC150_MAGN_CHANNEL(X),
 	BMC150_MAGN_CHANNEL(Y),
 	BMC150_MAGN_CHANNEL(Z),
-	IIO_CHAN_SOFT_TIMESTAMP(3),
+	IIO_CHAN_SOFT_TIMESTAMP(3),  //pre-defined channel for timestamp of size 64 bits - put at index 3
 };
 
 static const struct iio_info bmc150_magn_info = {
@@ -653,10 +709,14 @@ static const struct iio_info bmc150_magn_info = {
 	.write_raw = bmc150_magn_write_raw,
 };
 
+//this is equivalent to {0x07, 0}.
+//This means that one can either enable all the channels or none
+//active_scan_mask is allowed only these 2 values to be configured - 0x07 or 0
 static const unsigned long bmc150_magn_scan_masks[] = {
 					BIT(AXIS_X) | BIT(AXIS_Y) | BIT(AXIS_Z),
 					0};
 
+//read the data from the sensor and write it to the buffer alongwith timestamp
 static irqreturn_t bmc150_magn_trigger_handler(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
@@ -684,6 +744,8 @@ static int bmc150_magn_init(struct bmc150_magn_data *data)
 	int ret, chip_id;
 	struct bmc150_magn_preset preset;
 
+	//this is actually putting the device from suspend mode to sleep mode
+	//where we can access the chip id register
 	ret = bmc150_magn_set_power_mode(data, BMC150_MAGN_POWER_MODE_SUSPEND,
 					 false);
 	if (ret < 0) {
@@ -728,6 +790,7 @@ static int bmc150_magn_init(struct bmc150_magn_data *data)
 		goto err_poweroff;
 	}
 
+	//attempt to set max odr equal to preset.odr which itself is defined by presets
 	ret = bmc150_magn_set_max_odr(data, preset.rep_xy, preset.rep_z,
 				      preset.odr);
 	if (ret < 0)
@@ -743,6 +806,7 @@ static int bmc150_magn_init(struct bmc150_magn_data *data)
 	return 0;
 
 err_poweroff:
+	//this is putting the device into suspend mode by writing 0 to the power bit in 0x4B register
 	bmc150_magn_set_power_mode(data, BMC150_MAGN_POWER_MODE_SUSPEND, true);
 	return ret;
 }
@@ -785,6 +849,8 @@ static int bmc150_magn_data_rdy_trigger_set_state(struct iio_trigger *trig,
 	if (state == data->dready_trigger_on)
 		goto err_unlock;
 
+	//trigger DRDY interrupt by writing to bit 8 on 0x4E
+	//This also sets the status on bit 0 of 0x48 register
 	ret = regmap_update_bits(data->regmap, BMC150_MAGN_REG_INT_DRDY,
 				 BMC150_MAGN_MASK_DRDY_EN,
 				 state << BMC150_MAGN_SHIFT_DRDY_EN);
@@ -793,6 +859,14 @@ static int bmc150_magn_data_rdy_trigger_set_state(struct iio_trigger *trig,
 
 	data->dready_trigger_on = state;
 
+	//when the trigger comes, we immediately read the data from sensor, write it to the buffers
+	//and send the interrupt for the userspace application. Now since the data is already read, we
+	//can set the interrupt and status registers as un-set, so that we can entertain the next trigger
+	//It is upto the userspace application to read the buffer, as otherwise the buffer will be overwritten
+	//in the next trigger
+
+	//now we want to reset the Data ready interrupt and the corresponding status flag
+	//simple read from the data registers resets everything
 	if (state) {
 		ret = bmc150_magn_reset_intr(data);
 		if (ret < 0)
@@ -808,8 +882,8 @@ err_unlock:
 }
 
 static const struct iio_trigger_ops bmc150_magn_trigger_ops = {
-	.set_trigger_state = bmc150_magn_data_rdy_trigger_set_state,
-	.try_reenable = bmc150_magn_trig_try_reen,
+	.set_trigger_state = bmc150_magn_data_rdy_trigger_set_state, //do something whenever a trigger is served
+	.try_reenable = bmc150_magn_trig_try_reen,  //reset everything w.r.t trigger
 };
 
 static int bmc150_magn_buffer_preenable(struct iio_dev *indio_dev)
@@ -827,10 +901,10 @@ static int bmc150_magn_buffer_postdisable(struct iio_dev *indio_dev)
 }
 
 static const struct iio_buffer_setup_ops bmc150_magn_buffer_setup_ops = {
-	.preenable = bmc150_magn_buffer_preenable,
-	.postenable = iio_triggered_buffer_postenable,
-	.predisable = iio_triggered_buffer_predisable,
-	.postdisable = bmc150_magn_buffer_postdisable,
+	.preenable = bmc150_magn_buffer_preenable, //custom function - enable the device
+	.postenable = iio_triggered_buffer_postenable, //default function
+	.predisable = iio_triggered_buffer_predisable, //default function
+	.postdisable = bmc150_magn_buffer_postdisable, //custom function - disable the device
 };
 
 static const char *bmc150_magn_match_acpi_device(struct device *dev)
@@ -851,16 +925,19 @@ int bmc150_magn_probe(struct device *dev, struct regmap *regmap,
 	struct iio_dev *indio_dev;
 	int ret;
 
+	//the private data is appended at the end of iio_dev
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!indio_dev)
 		return -ENOMEM;
 
+	//iio_priv returns the pointer to the beginning of private data structure
 	data = iio_priv(indio_dev);
 	dev_set_drvdata(dev, indio_dev);
 	data->regmap = regmap;
 	data->irq = irq;
 	data->dev = dev;
 
+	//name is already set to bmc150_magn (at least in case of device tree matching)
 	if (!name && ACPI_HANDLE(dev))
 		name = bmc150_magn_match_acpi_device(dev);
 
@@ -871,10 +948,12 @@ int bmc150_magn_probe(struct device *dev, struct regmap *regmap,
 		return ret;
 
 	indio_dev->dev.parent = dev;
-	indio_dev->channels = bmc150_magn_channels;
+	indio_dev->channels = bmc150_magn_channels; //X,Y,Z and timestamp
 	indio_dev->num_channels = ARRAY_SIZE(bmc150_magn_channels);
+	//allowed configurations for active_scan_mask
 	indio_dev->available_scan_masks = bmc150_magn_scan_masks;
 	indio_dev->name = name;
+	//raw read based on sysfs, INDIO_BUFFER_TRIGGERED will automatically be added when iio_triggered_buffer_setup() is called
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->info = &bmc150_magn_info;
 
@@ -898,6 +977,9 @@ int bmc150_magn_probe(struct device *dev, struct regmap *regmap,
 			goto err_poweroff;
 		}
 
+		//iio_trigger_generic_data_rdy_poll is the top-half
+		//no bottom half
+		//hence we are not doing anything special on the interrupt.
 		ret = request_threaded_irq(irq,
 					   iio_trigger_generic_data_rdy_poll,
 					   NULL,
@@ -910,9 +992,10 @@ int bmc150_magn_probe(struct device *dev, struct regmap *regmap,
 		}
 	}
 
+	//below sets up the top-half and bottom-half for the trigger. It could be sysfs or interrupt
 	ret = iio_triggered_buffer_setup(indio_dev,
-					 iio_pollfunc_store_time,
-					 bmc150_magn_trigger_handler,
+					 iio_pollfunc_store_time, //top half - 99% cases we just store time
+					 bmc150_magn_trigger_handler, //bottom half - reads sensor x,y,z and write it to the triggered buffer
 					 &bmc150_magn_buffer_setup_ops);
 	if (ret < 0) {
 		dev_err(dev, "iio triggered buffer setup failed\n");
@@ -953,7 +1036,7 @@ EXPORT_SYMBOL(bmc150_magn_probe);
 
 int bmc150_magn_remove(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev); //uses container_of to get the parent iio_dev structure
 	struct bmc150_magn_data *data = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
@@ -1016,6 +1099,7 @@ static int bmc150_magn_suspend(struct device *dev)
 	struct bmc150_magn_data *data = iio_priv(indio_dev);
 	int ret;
 
+	pr_info("sleep of bmc150 called\n");
 	mutex_lock(&data->mutex);
 	ret = bmc150_magn_set_power_mode(data, BMC150_MAGN_POWER_MODE_SLEEP,
 					 true);
@@ -1029,7 +1113,7 @@ static int bmc150_magn_resume(struct device *dev)
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct bmc150_magn_data *data = iio_priv(indio_dev);
 	int ret;
-
+	pr_info("resume of bmc150 called\n");
 	mutex_lock(&data->mutex);
 	ret = bmc150_magn_set_power_mode(data, BMC150_MAGN_POWER_MODE_NORMAL,
 					 true);
